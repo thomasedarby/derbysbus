@@ -16,7 +16,7 @@ async function main() {
     throw new Error('CSV contains no header row');
   }
 
-  const headers = header.split(',');
+  const headers = splitCsvLine(header).map((key) => key.trim());
   const pages = new Map();
 
   for (const line of lines) {
@@ -63,27 +63,45 @@ async function main() {
 }
 
 function splitCsvLine(line, expectedColumns) {
-  const result = [];
+  const cells = [];
   let current = '';
   let inQuotes = false;
+
   for (let i = 0; i < line.length; i += 1) {
     const char = line[i];
+
     if (char === '"') {
-      inQuotes = !inQuotes;
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
       continue;
     }
+
     if (char === ',' && !inQuotes) {
-      result.push(current);
+      cells.push(current);
       current = '';
-    } else {
-      current += char;
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current);
+
+  if (typeof expectedColumns === 'number') {
+    while (cells.length < expectedColumns) {
+      cells.push('');
+    }
+    if (cells.length > expectedColumns) {
+      const overflow = cells.splice(expectedColumns - 1);
+      cells[expectedColumns - 1] = overflow.join(',');
     }
   }
-  result.push(current);
-  while (result.length < expectedColumns) {
-    result.push('');
-  }
-  return result;
+
+  return cells;
 }
 
 function ensurePage(pages, pagePath, title) {

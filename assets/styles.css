@@ -218,6 +218,10 @@ body {
   background: #fff;
   cursor: pointer;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  display: block;
 }
 
 .diagram-item:hover {
@@ -228,6 +232,17 @@ body {
 .diagram-item.active {
   border-color: #0f62fe;
   box-shadow: 0 10px 22px rgba(15, 98, 254, 0.2);
+}
+
+.diagram-item--empty {
+  cursor: default;
+  text-align: center;
+  border-style: dashed;
+}
+
+.diagram-item:focus-visible {
+  outline: 2px solid #0f62fe;
+  outline-offset: 2px;
 }
 
 .diagram-item h3 {
@@ -492,6 +507,7 @@ body {
 .instructions-trigger:hover {
   background: rgba(255, 255, 255, 0.12);
 }
+
 .modal-section pre code {
   background: transparent;
   padding: 0;

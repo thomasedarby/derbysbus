@@ -32,9 +32,16 @@ const state = {
   activeDiagram: null,
   panZoom: null,
   structureText: '',
+  renderToken: 0,
 };
 
 const CATEGORY_ORDER = ['Overview', 'Home & Index', 'Maps', 'Places Index', 'Timetables', 'Pages', 'Other'];
+const VIEWPORT = Object.freeze({
+  paddingX: 24,
+  paddingY: 24,
+  minHeight: 420,
+  extraSpace: 48,
+});
 
 init();
 
@@ -192,6 +199,7 @@ function updateCategoryButtons() {
   buttons.forEach((button) => {
     const isActive = button.textContent === state.activeCategory;
     button.classList.toggle('active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
   });
 }
 
@@ -214,17 +222,26 @@ function renderDiagramList() {
 
   if (!state.filteredDiagrams.length) {
     const empty = document.createElement('li');
-    empty.className = 'diagram-item';
+    empty.className = 'diagram-item diagram-item--empty';
+    empty.setAttribute('role', 'status');
     empty.textContent = 'No diagrams match your filters yet.';
     elements.list.appendChild(empty);
     return;
   }
 
   state.filteredDiagrams.forEach((diagram) => {
-    const item = document.createElement('li');
-    item.className = 'diagram-item';
-    if (diagram.id === state.activeDiagram?.id) {
-      item.classList.add('active');
+    const listItem = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'diagram-item';
+    button.dataset.diagramId = diagram.id;
+
+    const isActive = diagram.id === state.activeDiagram?.id;
+    button.classList.toggle('active', isActive);
+    if (isActive) {
+      button.setAttribute('aria-current', 'true');
+    } else {
+      button.removeAttribute('aria-current');
     }
 
     const title = document.createElement('h3');
@@ -233,10 +250,11 @@ function renderDiagramList() {
     const pathLine = document.createElement('p');
     pathLine.textContent = diagram.displayPath;
 
-    item.append(title, pathLine);
-    item.addEventListener('click', () => selectDiagram(diagram));
+    button.append(title, pathLine);
+    button.addEventListener('click', () => selectDiagram(diagram));
 
-    elements.list.appendChild(item);
+    listItem.appendChild(button);
+    elements.list.appendChild(listItem);
   });
 }
 
@@ -261,6 +279,8 @@ function selectDiagram(diagram, options = { updateHash: true }) {
 }
 
 async function renderDiagram(diagram) {
+  const renderToken = ++state.renderToken;
+  resetDiagramViewport();
   elements.diagramContainer.classList.add('loading');
   elements.diagramStage.innerHTML = '';
   elements.diagramToolbar.hidden = true;
@@ -277,13 +297,23 @@ async function renderDiagram(diagram) {
     }
 
     const source = await response.text();
+    if (renderToken !== state.renderToken) {
+      return;
+    }
     elements.sourceCode.textContent = source;
     populateStructurePanel(diagram, source);
 
     const { svg } = await mermaid.render(`diagram-${diagram.id}-${Date.now()}`, source);
+    if (renderToken !== state.renderToken) {
+      return;
+    }
     elements.diagramStage.innerHTML = svg;
     initializePanZoom();
   } catch (error) {
+    if (renderToken !== state.renderToken) {
+      console.error(error);
+      return;
+    }
     const message = document.createElement('p');
     message.className = 'empty-state';
     message.textContent = `Rendering failed: ${error.message}`;
@@ -291,7 +321,9 @@ async function renderDiagram(diagram) {
     console.error(error);
     elements.structureOutput.textContent = 'Unable to derive outline for this diagram.';
   } finally {
-    elements.diagramContainer.classList.remove('loading');
+    if (renderToken === state.renderToken) {
+      elements.diagramContainer.classList.remove('loading');
+    }
   }
 }
 
@@ -307,6 +339,8 @@ function displayGlobalError(message) {
   setStructureCopyAvailability(false);
   setViewerDescription(null);
   setViewPageLink(null);
+  resetDiagramViewport();
+  teardownPanZoom();
 }
 
 function initializePanZoom() {
@@ -315,30 +349,7 @@ function initializePanZoom() {
     return;
   }
 
-  const bbox = svgElement.getBBox();
-  if (bbox && bbox.width > 0 && bbox.height > 0) {
-    const paddingX = 24;
-    const paddingY = 24;
-    const desiredHeight = bbox.height + paddingY * 2;
-    const desiredWidth = bbox.width + paddingX * 2;
-
-    svgElement.setAttribute('width', desiredWidth);
-    svgElement.setAttribute('height', desiredHeight);
-    svgElement.setAttribute('viewBox', `${bbox.x - paddingX} ${bbox.y - paddingY} ${desiredWidth} ${desiredHeight}`);
-
-    const stageWidth = elements.diagramStage.clientWidth || desiredWidth;
-    const aspectRatio = desiredHeight / desiredWidth;
-    const computedHeight = Math.max(desiredHeight, stageWidth * aspectRatio);
-    const paddedHeight = computedHeight + 80;
-    const baseline = 420; // never shrink below the default container height
-    const containerHeight = Math.max(paddedHeight, baseline);
-    const stageHeight = containerHeight - 60; // leave room for toolbar + padding
-
-    elements.diagramContainer.style.minHeight = `${containerHeight}px`;
-    elements.diagramStage.style.height = `${stageHeight}px`;
-    svgElement.style.height = '100%';
-    svgElement.style.width = '100%';
-  }
+  applyViewportSizing(svgElement);
 
   teardownPanZoom();
 
@@ -362,6 +373,7 @@ function teardownPanZoom() {
     state.panZoom.destroy();
     state.panZoom = null;
   }
+  elements.diagramToolbar.hidden = true;
 }
 
 function refreshPanZoomView() {
@@ -369,6 +381,44 @@ function refreshPanZoomView() {
   state.panZoom.resize();
   state.panZoom.fit();
   state.panZoom.center();
+}
+
+function resetDiagramViewport() {
+  elements.diagramContainer.style.minHeight = `${VIEWPORT.minHeight}px`;
+  elements.diagramStage.style.height = '';
+}
+
+function applyViewportSizing(svgElement) {
+  if (!svgElement) {
+    resetDiagramViewport();
+    return;
+  }
+
+  const bbox = svgElement.getBBox();
+  if (!bbox || bbox.width === 0 || bbox.height === 0) {
+    resetDiagramViewport();
+    return;
+  }
+
+  const paddedWidth = bbox.width + VIEWPORT.paddingX * 2;
+  const paddedHeight = bbox.height + VIEWPORT.paddingY * 2;
+
+  svgElement.setAttribute('width', paddedWidth);
+  svgElement.setAttribute('height', paddedHeight);
+  svgElement.setAttribute(
+    'viewBox',
+    `${bbox.x - VIEWPORT.paddingX} ${bbox.y - VIEWPORT.paddingY} ${paddedWidth} ${paddedHeight}`,
+  );
+
+  svgElement.style.width = '100%';
+  svgElement.style.height = '100%';
+
+  const stageWidth = Math.max(elements.diagramStage.clientWidth || 0, paddedWidth);
+  const aspectRatio = paddedHeight / paddedWidth;
+  const projectedHeight = stageWidth * aspectRatio;
+  const containerHeight = Math.max(paddedHeight, projectedHeight, VIEWPORT.minHeight) + VIEWPORT.extraSpace;
+
+  elements.diagramContainer.style.minHeight = `${containerHeight}px`;
 }
 
 function handleToolbarAction(action) {
