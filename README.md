@@ -56,6 +56,7 @@ Commit the updated files in `data/`, `diagrams/`, and `exports/` so the UI and d
 ## Recreating the full pipeline for another site
 
 1. **Mirror the target site** with `wget` (replace the URL with the site you are auditing):
+
    ```bash
    wget \
      --mirror \
@@ -65,9 +66,11 @@ Commit the updated files in `data/`, `diagrams/`, and `exports/` so the UI and d
      --no-parent \
      https://example.com/
    ```
+
    This produces `www.example.com/` containing every HTML page, timetable PDF, map image, and asset.
 
 2. **Set up a Python environment** inside your project folder:
+
    ```bash
    python3 -m venv venv
    source venv/bin/activate
@@ -75,18 +78,22 @@ Commit the updated files in `data/`, `diagrams/`, and `exports/` so the UI and d
    ```
 
 3. **Drop in `scrape_tables.py`** beside the mirrored folder. The script should:
+
    - Iterate through all HTML files
    - Identify sections/headings to retain structural context
    - Capture timetable PDFs, map images, and other linked assets while skipping decorative chrome
    - Emit the CSV inventories (`page_inventory.csv`, `asset_inventory.csv`) and the Mermaid diagrams under `diagrams/`
 
 4. **Run the extractor**:
+
    ```bash
    python3 scrape_tables.py
    ```
+
    New diagrams land inside `diagrams/`, CSVs under `exports/`, and supporting JSON (e.g. `table_pdf_map.json`).
 
 5. **Optionally export SVGs** via Mermaid CLI:
+
    ```bash
    npm install -g @mermaid-js/mermaid-cli
 
@@ -100,10 +107,10 @@ Commit the updated files in `data/`, `diagrams/`, and `exports/` so the UI and d
 
 ## Helpful scripts
 
-| Script | Purpose |
-| --- | --- |
-| `node scripts/generate-manifest.mjs` | Recrawls `diagrams/`, builds `data/diagrams.json`, and enriches each entry with friendly names/URLs/descriptions. |
-| `node scripts/build-structured-data.mjs` | Converts `exports/asset_inventory.csv` into a hierarchical JSON map (`data/table_pdf_map.json`). |
+| Script                                   | Purpose                                                                                                           |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `node scripts/generate-manifest.mjs`     | Recrawls `diagrams/`, builds `data/diagrams.json`, and enriches each entry with friendly names/URLs/descriptions. |
+| `node scripts/build-structured-data.mjs` | Converts `exports/asset_inventory.csv` into a hierarchical JSON map (`data/table_pdf_map.json`).                  |
 
 ## Contributing
 
