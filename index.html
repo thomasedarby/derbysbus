@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DerbysBus Site Map Explorer</title>
+    <meta
+      name="description"
+      content="Interactive viewer for the existing derbysbus.info site structure diagrams"
+    />
+    <link rel="stylesheet" href="assets/styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"
+      defer
+    ></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="header-content">
+        <p class="eyebrow">Migration Planning Toolkit</p>
+        <div class="header-row">
+          <h1>
+            <a class="site-title-link" href="#overview"
+              >DerbysBus Site Map Explorer</a
+            >
+          </h1>
+          <div class="header-meta">
+            <div>
+              <p class="meta-label">Total diagrams</p>
+              <p class="meta-value" id="diagramCount">0</p>
+            </div>
+            <div>
+              <p class="meta-label">Data source</p>
+              <p class="meta-value">/diagrams/*.mmd</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section id="overview" class="introduction">
+      <div class="intro-collection">
+        <div class="intro-section intro-hero">
+          <p class="eyebrow">Start here</p>
+          <h2>Derbyshire Bus Information — Content Mapping &amp; File Audit</h2>
+          <p>
+            This explorer documents the entire <em>derbysbus.info</em> estate
+            using a local mirror captured via <code>wget</code>. Every
+            public-facing page is analysed to expose the PDFs, maps, and key
+            images that residents rely on today, making the legacy structure
+            transparent before it is rebuilt in the new platform.
+          </p>
+          <p>
+            The raw scrape and supporting exports are also stored in SharePoint
+            for backup and collaboration.
+          </p>
+          <div class="intro-actions">
+            <a
+              class="action-link"
+              href="https://derbyshirecountycouncil.sharepoint.com/:f:/r/teams/CSTCentreofExcellence/Shared%20Documents/Web/Travel%20Derbyshire?csf=1&web=1&e=EIOWCG"
+              target="_blank"
+              rel="noopener"
+              >Open SharePoint archive</a
+            >
+            <a class="action-link" href="exports/page_inventory.csv" download
+              >Download page inventory</a
+            >
+          </div>
+        </div>
+
+        <div class="intro-divider" aria-hidden="true"></div>
+
+        <div class="intro-section intro-columns">
+          <article>
+            <h3>What this tool does</h3>
+            <p>
+              We reprocessed every mirrored HTML file, ignoring decorative
+              chrome, to capture only public content assets. Each page is broken
+              into sections (e.g., page body, maps, timetables) so migration
+              teams can see where every timetable, town map, or supporting image
+              is referenced.
+            </p>
+            <ol>
+              <li>Full site crawl via <code>wget</code> snapshot</li>
+              <li>DOM parsing to catalogue PDFs, maps, and linked content</li>
+              <li>
+                Automatic filtering of logos, sprites, and layout furniture
+              </li>
+            </ol>
+          </article>
+
+          <article>
+            <h3>Data outputs</h3>
+            <p>
+              Use these exports for audits, migration tracking, or feeding a new
+              CMS. All files are regenerated alongside the diagrams so they stay
+              in sync.
+            </p>
+            <ul>
+              <li>
+                <a href="exports/page_inventory.csv" download
+                  >page_inventory.csv</a
+                >
+                — summary of every public page with asset counts.
+              </li>
+              <li>
+                <a href="exports/asset_inventory.csv" download
+                  >asset_inventory.csv</a
+                >
+                — row by row breakdown of each linked file, its section, and
+                URL.
+              </li>
+              <li>
+                <a href="data/table_pdf_map.json" download
+                  >table_pdf_map.json</a
+                >
+                — structured JSON (<code>page → sections → items</code>) for
+                programmatic reuse.
+              </li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="intro-divider" aria-hidden="true"></div>
+
+        <div class="intro-section intro-columns">
+          <article>
+            <h3>Mermaid diagrams</h3>
+            <p>
+              The diagrams translate the inventories into something humans can
+              scan quickly. Colour-coded nodes highlight PDFs (blue), maps
+              (green), images (purple), and the sitemap diagram summarises
+              totals per page. Zoom, pan, or download the Mermaid source
+              directly from the viewer below.
+            </p>
+          </article>
+
+          <article>
+            <h3>Why it matters</h3>
+            <ul>
+              <li>Ensures nothing is missed during CMS migration</li>
+              <li>Speeds up timetable/map redevelopment conversations</li>
+              <li>
+                Provides a single reference for content, diagrams, and raw files
+              </li>
+              <li>
+                Gives non-technical colleagues a clear view of today’s structure
+              </li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <main class="layout" aria-label="Diagram explorer">
+      <aside class="sidebar">
+        <label class="field-label" for="searchInput">Search</label>
+        <div class="search-box">
+          <input
+            type="search"
+            id="searchInput"
+            name="search"
+            placeholder="Search by page name or path"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="filters">
+          <p class="field-label">Section</p>
+          <div class="filter-pills" id="categoryFilters"></div>
+        </div>
+
+        <div class="diagram-list-wrapper">
+          <p class="field-label">Diagrams</p>
+          <ul class="diagram-list" id="diagramList"></ul>
+        </div>
+      </aside>
+
+      <section class="viewer" aria-live="polite">
+        <div class="viewer-header">
+          <div>
+            <p class="eyebrow" id="viewerCategory">Choose a diagram</p>
+            <h2 id="viewerTitle">Nothing selected</h2>
+            <p class="viewer-path" id="viewerPath">
+              Pick a diagram on the left to render it here.
+            </p>
+            <p class="viewer-description" id="viewerDescription">
+              Once you load a diagram, the live page summary will appear here.
+            </p>
+          </div>
+          <div class="viewer-actions">
+            <a
+              id="viewPageLink"
+              class="action-link"
+              href="#"
+              target="_blank"
+              rel="noopener"
+              hidden
+              >View live page</a
+            >
+            <a id="downloadLink" class="action-link" href="#" download
+              >Download .mmd</a
+            >
+            <button id="copyLink" class="action-link" type="button">
+              Copy share link
+            </button>
+          </div>
+        </div>
+
+        <div class="diagram-container" id="diagramContainer">
+          <div class="diagram-toolbar" id="diagramToolbar" hidden>
+            <button type="button" data-action="zoom-in" aria-label="Zoom in">
+              +
+            </button>
+            <button type="button" data-action="zoom-out" aria-label="Zoom out">
+              −
+            </button>
+            <button type="button" data-action="reset" aria-label="Reset view">
+              Reset
+            </button>
+            <button
+              type="button"
+              data-action="fit"
+              aria-label="Fit to container"
+            >
+              Fit
+            </button>
+          </div>
+          <div class="diagram-stage" id="diagramStage">
+            <p class="empty-state">Use the list to load a diagram preview.</p>
+          </div>
+        </div>
+
+        <div class="data-panels">
+          <details class="raw-source" open>
+            <summary>Mermaid source</summary>
+            <pre id="sourceCode">Select a diagram to see the source</pre>
+          </details>
+
+          <section class="structure-panel">
+            <div class="structure-header">
+              <p class="field-label">Structured outline</p>
+              <button id="copyStructure" class="compact-action" type="button">
+                Copy outline
+              </button>
+            </div>
+            <pre id="structureOutput">
+Select a diagram to derive its outline</pre
+            >
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>
+        Need to refresh the list after adding new Mermaid files? Run
+        <code>node scripts/generate-manifest.mjs</code> and commit the updated
+        <code>data/diagrams.json</code>.
+      </p>
+    </footer>
+
+    <script type="module" src="assets/app.js"></script>
+  </body>
+</html>
