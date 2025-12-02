@@ -254,13 +254,226 @@ Select a diagram to derive its outline</pre
     </main>
 
     <footer class="site-footer">
-      <p>
-        Need to refresh the list after adding new Mermaid files? Run
-        <code>node scripts/generate-manifest.mjs</code> and commit the updated
-        <code>data/diagrams.json</code>.
-      </p>
+      <div class="footer-content">
+        <p>
+          Need to refresh the list after adding new Mermaid files? Run
+          <code>node scripts/generate-manifest.mjs</code> and commit the updated
+          <code>data/diagrams.json</code>.
+        </p>
+        <button
+          class="instructions-trigger"
+          type="button"
+          id="instructionsButton"
+        >
+          View rebuild instructions
+        </button>
+      </div>
+      <div class="footer-meta">
+        <span>Made by</span>
+        <a
+          class="github-link"
+          href="https://github.com/thomasedarby"
+          target="_blank"
+          rel="noopener"
+          aria-label="thomasedarby on GitHub"
+        >
+          <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+            <path
+              d="M12 .5C5.648.5.5 5.646.5 12c0 5.088 3.293 9.395 7.863 10.919.574.11.783-.249.783-.553 0-.273-.01-.997-.015-1.958-3.2.696-3.879-1.544-3.879-1.544-.523-1.33-1.279-1.687-1.279-1.687-1.045-.714.079-.699.079-.699 1.157.082 1.767 1.189 1.767 1.189 1.028 1.763 2.697 1.254 3.354.959.104-.746.402-1.254.732-1.542-2.553-.29-5.237-1.276-5.237-5.681 0-1.255.45-2.282 1.187-3.086-.119-.29-.515-1.459.112-3.042 0 0 .966-.31 3.167 1.179a10.88 10.88 0 0 1 2.884-.388c.978.005 1.963.133 2.884.388 2.199-1.49 3.164-1.179 3.164-1.179.629 1.583.233 2.752.114 3.042.739.804 1.186 1.831 1.186 3.086 0 4.417-2.69 5.387-5.256 5.672.413.355.78 1.05.78 2.115 0 1.526-.014 2.757-.014 3.133 0 .307.206.668.79.552C20.211 21.39 23.5 17.085 23.5 12 23.5 5.646 18.352.5 12 .5Z"
+            />
+          </svg>
+          <span>@thomasedarby</span>
+        </a>
+        <a
+          class="repo-link"
+          href="https://github.com/thomasedarby/derbysbus"
+          target="_blank"
+          rel="noopener"
+        >
+          View the repository
+        </a>
+      </div>
     </footer>
 
+    <div class="modal" id="instructionsModal" hidden>
+      <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true"></div>
+      <div
+        class="modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="instructionsTitle"
+      >
+        <div class="modal-header">
+          <div>
+            <p class="eyebrow">Documentation</p>
+            <h2 id="instructionsTitle">Rebuild &amp; sharing instructions</h2>
+          </div>
+          <button class="modal-close" type="button" id="instructionsClose">
+            Close
+          </button>
+        </div>
+        <div class="modal-body">
+          <section class="modal-section">
+            <h3>Update the existing diagrams</h3>
+            <p>
+              After editing any Mermaid files, rerun the manifest and structured
+              data builders from the project root:
+            </p>
+            <pre><code>node scripts/generate-manifest.mjs
+node scripts/build-structured-data.mjs</code></pre>
+            <p>
+              Commit the refreshed files in <code>data/</code>,
+              <code>diagrams/</code>, and <code>exports/</code> so the web UI
+              and CSVs stay in sync.
+            </p>
+          </section>
+
+          <section class="modal-section">
+            <h3>Clone this project</h3>
+            <p>
+              Start by cloning the repository so you can reuse the viewer,
+              scripts, and styles:
+            </p>
+            <pre><code>git clone https://github.com/thomasedarby/derbysbus.git
+cd derbysbus</code></pre>
+            <p>
+              Install any tooling you need (Node 18+, Python 3.10+, Mermaid CLI)
+              before proceeding.
+            </p>
+          </section>
+
+          <section class="modal-section">
+            <h3>1. Mirror the target website</h3>
+            <p>
+              Use <code>wget</code> to create a local copy of the legacy site
+              you want to analyse. Replace the URL with the real domain:
+            </p>
+            <pre><code>wget \
+  --mirror \
+  --convert-links \
+  --adjust-extension \
+  --page-requisites \
+  --no-parent \
+  https://example.com/</code></pre>
+            <p>
+              The command builds a folder such as <code>www.example.com/</code>
+              that contains every HTML page, timetable PDF, image, and asset.
+            </p>
+          </section>
+
+          <section class="modal-section">
+            <h3>2. Set up a Python environment</h3>
+            <p>
+              Inside the project folder, create a virtual environment for the
+              scraper and install BeautifulSoup:
+            </p>
+            <pre><code>python3 -m venv venv
+source venv/bin/activate
+pip install beautifulsoup4</code></pre>
+          </section>
+
+          <section class="modal-section">
+            <h3>3. Add the analysis script</h3>
+            <p>
+              Place <code>scrape_tables.py</code> alongside the mirrored folder
+              (for example <code>your-project/scrape_tables.py</code>). The
+              script should:
+            </p>
+            <ul>
+              <li>Iterate through every HTML page in the mirror</li>
+              <li>Detect sections/headings so output stays structured</li>
+              <li>
+                Capture timetable PDFs, map PDFs/images, and other linked files
+              </li>
+              <li>Exclude decorative sprites, icons, and layout furniture</li>
+              <li>
+                Generate CSV inventories plus Mermaid (<code>.mmd</code>)
+                diagrams per page
+              </li>
+            </ul>
+          </section>
+
+          <section class="modal-section">
+            <h3>4. Run the extraction</h3>
+            <p>Execute the scraper while the virtual environment is active:</p>
+            <pre><code>python3 scrape_tables.py</code></pre>
+            <p>This produces:</p>
+            <ul>
+              <li><code>table_pdf_map.json</code></li>
+              <li>
+                <code>exports/page_inventory.csv</code> and
+                <code>exports/asset_inventory.csv</code>
+              </li>
+              <li>
+                <code>diagrams/pages/*.mmd</code> plus <code>sitemap.mmd</code>
+              </li>
+            </ul>
+          </section>
+
+          <section class="modal-section">
+            <h3>5. Review the CSV outputs</h3>
+            <ul>
+              <li>
+                <code>exports/page_inventory.csv</code> — every public page with
+                counts of linked assets
+              </li>
+              <li>
+                <code>exports/asset_inventory.csv</code> — each timetable, map,
+                or supporting file with its source section
+              </li>
+            </ul>
+            <p>Use these for audits, QA, and migration planning.</p>
+          </section>
+
+          <section class="modal-section">
+            <h3>6. Convert Mermaid diagrams into SVGs (optional)</h3>
+            <p>Install the Mermaid CLI once:</p>
+            <pre><code>npm install -g @mermaid-js/mermaid-cli</code></pre>
+            <p>Then render every diagram:</p>
+            <pre><code>for file in diagrams/pages/*.mmd; do
+  mmdc -i "$file" -o "${file%.mmd}.svg"
+
+
+mmdc -i diagrams/sitemap.mmd -o diagrams/sitemap.svg</code></pre>
+          </section>
+
+          <section class="modal-section">
+            <h3>7. Publish or review locally</h3>
+            <p>Host the viewer and outputs wherever your teams work:</p>
+            <ul>
+              <li>GitHub Pages or Netlify for static hosting</li>
+              <li>SharePoint / Confluence for internal audiences</li>
+              <li>Discovery documents, migration packs, or QA trackers</li>
+            </ul>
+          </section>
+
+          <section class="modal-section">
+            <h3>8. Repeat for another site</h3>
+            <ol>
+              <li>Point <code>wget</code> at the new domain</li>
+              <li>Reset or archive the previous mirror folder</li>
+              <li>Re-run the scraper and manifest builders</li>
+              <li>Commit and publish the refreshed diagrams</li>
+            </ol>
+            <p>
+              Rinse and repeat to catalogue every legacy estate quickly while
+              keeping evidence in version control.
+            </p>
+          </section>
+
+          <section class="modal-section">
+            <h3>Why this matters</h3>
+            <ul>
+              <li>Visualises legacy architecture for non-technical teams</li>
+              <li>Surfaces every timetable/map dependency before migration</li>
+              <li>Highlights missing, broken, or duplicated assets</li>
+              <li>Provides exportable data for new CMS builds</li>
+              <li>Creates repeatable documentation in hours, not weeks</li>
+            </ul>
+          </section>
+        </div>
+      </div>
+    </div>
     <script type="module" src="assets/app.js"></script>
   </body>
 </html>

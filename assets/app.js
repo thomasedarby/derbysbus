@@ -18,6 +18,10 @@ const elements = {
   copyLink: document.getElementById('copyLink'),
   viewPageLink: document.getElementById('viewPageLink'),
   copyStructure: document.getElementById('copyStructure'),
+  instructionsButton: document.getElementById('instructionsButton'),
+  instructionsModal: document.getElementById('instructionsModal'),
+  instructionsClose: document.getElementById('instructionsClose'),
+  modalBackdrop: document.getElementById('modalBackdrop'),
 };
 
 const state = {
@@ -141,11 +145,35 @@ function attachEventListeners() {
     refreshPanZoomView();
   });
 
+  elements.instructionsButton?.addEventListener('click', openInstructionsModal);
+  elements.instructionsClose?.addEventListener('click', closeInstructionsModal);
+  elements.modalBackdrop?.addEventListener('click', closeInstructionsModal);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !elements.instructionsModal?.hidden) {
+      closeInstructionsModal();
+    }
+  });
+
   elements.diagramToolbar.addEventListener('click', (event) => {
     const target = event.target.closest('button[data-action]');
     if (!target) return;
     handleToolbarAction(target.dataset.action);
   });
+}
+
+function openInstructionsModal() {
+  if (!elements.instructionsModal) return;
+  elements.instructionsModal.hidden = false;
+  document.body.classList.add('modal-open');
+  elements.instructionsClose?.focus();
+}
+
+function closeInstructionsModal() {
+  if (!elements.instructionsModal) return;
+  if (!elements.instructionsModal.hidden) {
+    elements.instructionsModal.hidden = true;
+    document.body.classList.remove('modal-open');
+  }
 }
 
 function flashButtonStatus(button, message, fallbackText) {
@@ -301,7 +329,15 @@ function initializePanZoom() {
     const stageWidth = elements.diagramStage.clientWidth || desiredWidth;
     const aspectRatio = desiredHeight / desiredWidth;
     const computedHeight = Math.max(desiredHeight, stageWidth * aspectRatio);
-    elements.diagramContainer.style.minHeight = `${computedHeight + 80}px`;
+    const paddedHeight = computedHeight + 80;
+    const baseline = 420; // never shrink below the default container height
+    const containerHeight = Math.max(paddedHeight, baseline);
+    const stageHeight = containerHeight - 60; // leave room for toolbar + padding
+
+    elements.diagramContainer.style.minHeight = `${containerHeight}px`;
+    elements.diagramStage.style.height = `${stageHeight}px`;
+    svgElement.style.height = '100%';
+    svgElement.style.width = '100%';
   }
 
   teardownPanZoom();
