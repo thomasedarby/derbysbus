@@ -9,6 +9,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -370,6 +374,29 @@ body {
 .empty-state {
   text-align: center;
   color: #98a2b3;
+}
+
+.aggregate-view {
+  margin-top: 1.5rem;
+}
+
+.aggregate-panel {
+  min-height: 320px;
+}
+
+.aggregate-header {
+  align-items: flex-start;
+}
+
+.aggregate-header > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.aggregate-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(248, 250, 252, 0.7);
 }
 
 .raw-source summary {

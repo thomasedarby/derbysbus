@@ -232,6 +232,33 @@
           </div>
         </div>
 
+        <section
+          class="aggregate-view"
+          id="aggregateView"
+          hidden
+          aria-live="polite"
+        >
+          <div class="structure-panel aggregate-panel">
+            <div class="structure-header aggregate-header">
+              <div>
+                <p class="field-label">Structured outline overview</p>
+                <p class="aggregate-hint">
+                  Generated from every Mermaid diagram.
+                </p>
+              </div>
+              <button
+                id="copyAggregate"
+                class="compact-action"
+                type="button"
+                disabled
+              >
+                Copy overview
+              </button>
+            </div>
+            <pre id="aggregateOutput">Building outline overview…</pre>
+          </div>
+        </section>
+
         <div class="data-panels">
           <details class="raw-source" open>
             <summary>Mermaid source</summary>

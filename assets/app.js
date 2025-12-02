@@ -22,6 +22,10 @@ const elements = {
   instructionsModal: document.getElementById('instructionsModal'),
   instructionsClose: document.getElementById('instructionsClose'),
   modalBackdrop: document.getElementById('modalBackdrop'),
+  aggregateView: document.getElementById('aggregateView'),
+  aggregateOutput: document.getElementById('aggregateOutput'),
+  copyAggregate: document.getElementById('copyAggregate'),
+  dataPanels: document.querySelector('.data-panels'),
 };
 
 const state = {
@@ -33,9 +37,17 @@ const state = {
   panZoom: null,
   structureText: '',
   renderToken: 0,
+  outlineCache: new Map(),
+  aggregate: {
+    status: 'idle',
+    promise: null,
+    text: '',
+    token: 0,
+  },
 };
 
 const CATEGORY_ORDER = ['Overview', 'Home & Index', 'Maps', 'Places Index', 'Timetables', 'Pages', 'Other'];
+const AGGREGATE_VIEW_ID = 'structured-outline-overview';
 const VIEWPORT = Object.freeze({
   paddingX: 24,
   paddingY: 24,
@@ -52,13 +64,16 @@ async function init() {
       throw new Error('Unable to load diagram manifest');
     }
 
-    state.diagrams = await response.json();
-    elements.count.textContent = state.diagrams.length;
+    const manifest = await response.json();
+    state.diagrams = prepareDiagramEntries(manifest);
+    elements.count.textContent = getRealDiagrams().length;
     setStructureCopyAvailability(false);
 
     buildCategoryFilters();
     attachEventListeners();
     applyFilters();
+
+    const defaultDiagram = getRealDiagrams()[0] ?? state.diagrams[0];
 
     const hashId = window.location.hash.replace('#', '');
     if (hashId) {
@@ -69,12 +84,43 @@ async function init() {
       }
     }
 
-    if (state.diagrams.length) {
-      selectDiagram(state.diagrams[0], { updateHash: false });
+    if (defaultDiagram) {
+      selectDiagram(defaultDiagram, { updateHash: false });
     }
   } catch (error) {
     displayGlobalError(error.message);
   }
+}
+
+function prepareDiagramEntries(diagrams) {
+  const ordered = reorderDiagrams(diagrams ?? []);
+  return [buildAggregateEntry(), ...ordered];
+}
+
+function reorderDiagrams(diagrams) {
+  const items = Array.from(diagrams ?? []);
+  const sitemapIndex = items.findIndex(isSitemapEntry);
+  if (sitemapIndex > -1) {
+    const [sitemapDiagram] = items.splice(sitemapIndex, 1);
+    items.unshift(sitemapDiagram);
+  }
+  return items;
+}
+
+function isSitemapEntry(diagram) {
+  const source = `${diagram?.sourcePath ?? ''} ${diagram?.name ?? ''}`.toLowerCase();
+  return source.includes('sitemap');
+}
+
+function buildAggregateEntry() {
+  return {
+    id: AGGREGATE_VIEW_ID,
+    name: 'Structured outline overview',
+    displayPath: 'All diagrams',
+    category: 'Overview',
+    description: 'Combined structured outline data from every Mermaid diagram.',
+    isAggregateOverview: true,
+  };
 }
 
 function buildCategoryFilters() {
@@ -134,6 +180,17 @@ function attachEventListeners() {
       flashButtonStatus(elements.copyStructure, 'Copied', 'Copy outline');
     } catch (error) {
       flashButtonStatus(elements.copyStructure, 'Unable to copy', 'Copy outline');
+      console.error('Clipboard error', error);
+    }
+  });
+
+  elements.copyAggregate?.addEventListener('click', async () => {
+    if (!state.aggregate.text) return;
+    try {
+      await navigator.clipboard.writeText(state.aggregate.text);
+      flashButtonStatus(elements.copyAggregate, 'Copied', 'Copy overview');
+    } catch (error) {
+      flashButtonStatus(elements.copyAggregate, 'Unable to copy', 'Copy overview');
       console.error('Clipboard error', error);
     }
   });
@@ -221,11 +278,13 @@ function renderDiagramList() {
   elements.list.innerHTML = '';
 
   if (!state.filteredDiagrams.length) {
-    const empty = document.createElement('li');
-    empty.className = 'diagram-item diagram-item--empty';
-    empty.setAttribute('role', 'status');
-    empty.textContent = 'No diagrams match your filters yet.';
-    elements.list.appendChild(empty);
+    const listItem = document.createElement('li');
+    const placeholder = document.createElement('div');
+    placeholder.className = 'diagram-item diagram-item--empty';
+    placeholder.setAttribute('role', 'status');
+    placeholder.textContent = 'No diagrams match your filters yet.';
+    listItem.appendChild(placeholder);
+    elements.list.appendChild(listItem);
     return;
   }
 
@@ -262,19 +321,34 @@ function selectDiagram(diagram, options = { updateHash: true }) {
   state.activeDiagram = diagram;
   updateCategoryButtons();
 
+  const isAggregate = Boolean(diagram.isAggregateOverview);
+
   elements.viewerTitle.textContent = diagram.name;
   elements.viewerCategory.textContent = diagram.category ?? 'Diagram';
-  elements.viewerPath.textContent = diagram.displayPath;
-  setViewerDescription(diagram.description);
-  setViewPageLink(diagram.url);
-  elements.downloadLink.href = diagram.file;
-  elements.downloadLink.setAttribute('download', `${diagram.name}.mmd`);
+  elements.viewerPath.textContent = diagram.displayPath ?? '';
+  setViewerDescription(
+    isAggregate
+      ? 'Combined structured outline data from every Mermaid diagram.'
+      : diagram.description,
+  );
+  elements.downloadLink.hidden = isAggregate;
+  setViewPageLink(isAggregate ? null : diagram.url);
+  if (!isAggregate) {
+    elements.downloadLink.href = diagram.file;
+    elements.downloadLink.setAttribute('download', `${diagram.name}.mmd`);
+  }
 
   if (options.updateHash) {
     window.history.replaceState(null, '', `#${diagram.id}`);
   }
 
-  renderDiagram(diagram);
+  if (isAggregate) {
+    showAggregateView();
+  } else {
+    hideAggregateView();
+    renderDiagram(diagram);
+  }
+
   renderDiagramList();
 }
 
@@ -421,6 +495,128 @@ function applyViewportSizing(svgElement) {
   elements.diagramContainer.style.minHeight = `${containerHeight}px`;
 }
 
+function showAggregateView() {
+  elements.diagramContainer.hidden = true;
+  elements.aggregateView.hidden = false;
+  elements.dataPanels.hidden = true;
+  teardownPanZoom();
+  setStructureCopyAvailability(false);
+  state.structureText = '';
+
+  if (state.aggregate.status === 'ready' && state.aggregate.text) {
+    elements.aggregateOutput.textContent = state.aggregate.text;
+    setAggregateCopyAvailability(true);
+  } else {
+    elements.aggregateOutput.textContent = 'Building outline overview…';
+    setAggregateCopyAvailability(false);
+  }
+
+  const token = ++state.aggregate.token;
+
+  loadAggregateOutline()
+    .then((text) => {
+      if (token !== state.aggregate.token || state.activeDiagram?.id !== AGGREGATE_VIEW_ID) {
+        return;
+      }
+      elements.aggregateOutput.textContent = text || 'No outline data detected yet.';
+      setAggregateCopyAvailability(Boolean(text));
+    })
+    .catch((error) => {
+      if (token !== state.aggregate.token || state.activeDiagram?.id !== AGGREGATE_VIEW_ID) {
+        return;
+      }
+      elements.aggregateOutput.textContent = 'Unable to build the outline overview.';
+      setAggregateCopyAvailability(false);
+      console.error('Aggregate outline error', error);
+    });
+}
+
+function hideAggregateView() {
+  elements.aggregateView.hidden = true;
+  elements.diagramContainer.hidden = false;
+  elements.dataPanels.hidden = false;
+  setAggregateCopyAvailability(false);
+}
+
+function loadAggregateOutline() {
+  if (state.aggregate.status === 'ready') {
+    return Promise.resolve(state.aggregate.text);
+  }
+
+  if (state.aggregate.status === 'loading' && state.aggregate.promise) {
+    return state.aggregate.promise;
+  }
+
+  state.aggregate.status = 'loading';
+  state.aggregate.promise = buildAggregateOutline()
+    .then((text) => {
+      state.aggregate.status = 'ready';
+      state.aggregate.text = text;
+      state.aggregate.promise = null;
+      return text;
+    })
+    .catch((error) => {
+      state.aggregate.status = 'idle';
+      state.aggregate.text = '';
+      state.aggregate.promise = null;
+      throw error;
+    });
+
+  return state.aggregate.promise;
+}
+
+async function buildAggregateOutline() {
+  const lines = [];
+  for (const diagram of getRealDiagrams()) {
+    if (!diagram || diagram.isAggregateOverview) continue;
+    const outline = await getDiagramOutline(diagram);
+    if (!outline) continue;
+    lines.push(`Diagram: ${diagram.name}`);
+    if (diagram.displayPath) {
+      lines.push(`Path: ${diagram.displayPath}`);
+    }
+    lines.push(`Category: ${diagram.category ?? 'Diagram'}`);
+    lines.push('');
+    lines.push(outline);
+    lines.push('');
+  }
+  return lines.join('\n').trim();
+}
+
+async function getDiagramOutline(diagram) {
+  if (!diagram) return '';
+  if (state.outlineCache.has(diagram.id)) {
+    return state.outlineCache.get(diagram.id);
+  }
+
+  try {
+    const response = await fetch(diagram.file);
+    if (!response.ok) {
+      throw new Error('Unable to load Mermaid file');
+    }
+    const source = await response.text();
+    const outline = deriveOutline(diagram, source);
+    state.outlineCache.set(diagram.id, outline ?? '');
+    return outline ?? '';
+  } catch (error) {
+    console.error(`Unable to derive outline for ${diagram.name}`, error);
+    state.outlineCache.set(diagram.id, '');
+    return '';
+  }
+}
+
+function deriveOutline(diagram, source) {
+  const structureTree = buildStructureTree(source);
+  if (!structureTree.length) return '';
+  return isSitemapDiagram(diagram)
+    ? formatSitemapOutline(structureTree)
+    : formatStructureTree(structureTree);
+}
+
+function getRealDiagrams() {
+  return state.diagrams.filter((diagram) => !diagram.isAggregateOverview);
+}
+
 function handleToolbarAction(action) {
   if (!state.panZoom) return;
 
@@ -445,19 +641,16 @@ function handleToolbarAction(action) {
 }
 
 function populateStructurePanel(diagram, source) {
-  const structureTree = buildStructureTree(source);
-  if (!structureTree.length) {
+  const outlineText = deriveOutline(diagram, source);
+  if (!outlineText) {
     elements.structureOutput.textContent = 'No outline data detected in this diagram.';
     state.structureText = '';
     setStructureCopyAvailability(false);
     return;
   }
-
-  const outlineText = isSitemapDiagram(diagram)
-    ? formatSitemapOutline(structureTree)
-    : formatStructureTree(structureTree);
   elements.structureOutput.textContent = outlineText;
   state.structureText = outlineText;
+  state.outlineCache.set(diagram.id, outlineText);
   setStructureCopyAvailability(true);
 }
 
@@ -574,6 +767,11 @@ function expandSitemapText(text) {
 function setStructureCopyAvailability(isEnabled) {
   if (!elements.copyStructure) return;
   elements.copyStructure.disabled = !isEnabled;
+}
+
+function setAggregateCopyAvailability(isEnabled) {
+  if (!elements.copyAggregate) return;
+  elements.copyAggregate.disabled = !isEnabled;
 }
 
 function setViewerDescription(description) {
