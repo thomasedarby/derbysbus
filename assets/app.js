@@ -38,6 +38,7 @@ const state = {
   structureText: '',
   renderToken: 0,
   outlineCache: new Map(),
+  outlinePromises: new Map(),
   aggregate: {
     status: 'idle',
     promise: null,
@@ -54,6 +55,30 @@ const VIEWPORT = Object.freeze({
   minHeight: 420,
   extraSpace: 48,
 });
+const TEXT = Object.freeze({
+  aggregateDescription: 'Combined structured outline data from every Mermaid diagram.',
+  defaultDescription: 'No description available for this page yet.',
+  noOutline: 'No outline data detected in this diagram.',
+  derivingOutline: 'Deriving outline…',
+  loadingSource: 'Loading…',
+  missingDiagramFile: 'Diagram source path missing for this entry.',
+});
+
+function addListener(element, eventName, handler) {
+  if (!element) return;
+  element.addEventListener(eventName, handler);
+}
+
+function safeString(value) {
+  return typeof value === 'string' ? value : '';
+}
+
+function createStatusMessage(text, className = 'empty-state') {
+  const message = document.createElement('p');
+  message.className = className;
+  message.textContent = text;
+  return message;
+}
 
 init();
 
@@ -154,12 +179,12 @@ function buildCategoryFilters() {
 }
 
 function attachEventListeners() {
-  elements.search.addEventListener('input', (event) => {
+  addListener(elements.search, 'input', (event) => {
     state.searchQuery = event.target.value.toLowerCase().trim();
     applyFilters();
   });
 
-  elements.copyLink?.addEventListener('click', async () => {
+  addListener(elements.copyLink, 'click', async () => {
     if (!state.activeDiagram) return;
     const url = new URL(window.location.href);
     url.hash = state.activeDiagram.id;
@@ -173,7 +198,7 @@ function attachEventListeners() {
     }
   });
 
-  elements.copyStructure?.addEventListener('click', async () => {
+  addListener(elements.copyStructure, 'click', async () => {
     if (!state.structureText) return;
     try {
       await navigator.clipboard.writeText(state.structureText);
@@ -184,7 +209,7 @@ function attachEventListeners() {
     }
   });
 
-  elements.copyAggregate?.addEventListener('click', async () => {
+  addListener(elements.copyAggregate, 'click', async () => {
     if (!state.aggregate.text) return;
     try {
       await navigator.clipboard.writeText(state.aggregate.text);
@@ -209,16 +234,16 @@ function attachEventListeners() {
     refreshPanZoomView();
   });
 
-  elements.instructionsButton?.addEventListener('click', openInstructionsModal);
-  elements.instructionsClose?.addEventListener('click', closeInstructionsModal);
-  elements.modalBackdrop?.addEventListener('click', closeInstructionsModal);
+  addListener(elements.instructionsButton, 'click', openInstructionsModal);
+  addListener(elements.instructionsClose, 'click', closeInstructionsModal);
+  addListener(elements.modalBackdrop, 'click', closeInstructionsModal);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !elements.instructionsModal?.hidden) {
       closeInstructionsModal();
     }
   });
 
-  elements.diagramToolbar.addEventListener('click', (event) => {
+  addListener(elements.diagramToolbar, 'click', (event) => {
     const target = event.target.closest('button[data-action]');
     if (!target) return;
     handleToolbarAction(target.dataset.action);
@@ -265,7 +290,7 @@ function applyFilters() {
     const matchesCategory =
       state.activeCategory === 'All' || diagram.category === state.activeCategory;
 
-    const haystack = `${diagram.name} ${diagram.displayPath}`.toLowerCase();
+    const haystack = `${safeString(diagram.name)} ${safeString(diagram.displayPath)}`.toLowerCase();
     const matchesSearch = !state.searchQuery || haystack.includes(state.searchQuery);
 
     return matchesCategory && matchesSearch;
@@ -318,6 +343,7 @@ function renderDiagramList() {
 }
 
 function selectDiagram(diagram, options = { updateHash: true }) {
+  if (!diagram) return;
   state.activeDiagram = diagram;
   updateCategoryButtons();
 
@@ -326,11 +352,7 @@ function selectDiagram(diagram, options = { updateHash: true }) {
   elements.viewerTitle.textContent = diagram.name;
   elements.viewerCategory.textContent = diagram.category ?? 'Diagram';
   elements.viewerPath.textContent = diagram.displayPath ?? '';
-  setViewerDescription(
-    isAggregate
-      ? 'Combined structured outline data from every Mermaid diagram.'
-      : diagram.description,
-  );
+  setViewerDescription(isAggregate ? TEXT.aggregateDescription : diagram.description);
   elements.downloadLink.hidden = isAggregate;
   setViewPageLink(isAggregate ? null : diagram.url);
   if (!isAggregate) {
@@ -358,11 +380,18 @@ async function renderDiagram(diagram) {
   elements.diagramContainer.classList.add('loading');
   elements.diagramStage.innerHTML = '';
   elements.diagramToolbar.hidden = true;
-  elements.sourceCode.textContent = 'Loading…';
-  elements.structureOutput.textContent = 'Deriving outline…';
+  elements.sourceCode.textContent = TEXT.loadingSource;
+  elements.structureOutput.textContent = TEXT.derivingOutline;
   setStructureCopyAvailability(false);
   state.structureText = '';
   teardownPanZoom();
+
+  if (!diagram?.file) {
+    elements.diagramStage.appendChild(createStatusMessage(TEXT.missingDiagramFile));
+    elements.structureOutput.textContent = TEXT.noOutline;
+    elements.diagramContainer.classList.remove('loading');
+    return;
+  }
 
   try {
     const response = await fetch(diagram.file);
@@ -408,7 +437,8 @@ function displayGlobalError(message) {
   li.textContent = message;
   elements.list.appendChild(li);
 
-  elements.diagramStage.innerHTML = `<p class="empty-state">${message}</p>`;
+  elements.diagramStage.innerHTML = '';
+  elements.diagramStage.appendChild(createStatusMessage(message));
   elements.structureOutput.textContent = message;
   setStructureCopyAvailability(false);
   setViewerDescription(null);
@@ -566,11 +596,21 @@ function loadAggregateOutline() {
 }
 
 async function buildAggregateOutline() {
+  const diagrams = getRealDiagrams().filter(Boolean);
+  if (!diagrams.length) {
+    return '';
+  }
+
+  const outlineEntries = await Promise.all(
+    diagrams.map(async (diagram) => ({
+      diagram,
+      outline: await getDiagramOutline(diagram),
+    })),
+  );
+
   const lines = [];
-  for (const diagram of getRealDiagrams()) {
-    if (!diagram || diagram.isAggregateOverview) continue;
-    const outline = await getDiagramOutline(diagram);
-    if (!outline) continue;
+  outlineEntries.forEach(({ diagram, outline }) => {
+    if (!outline) return;
     lines.push(`Diagram: ${diagram.name}`);
     if (diagram.displayPath) {
       lines.push(`Path: ${diagram.displayPath}`);
@@ -579,7 +619,8 @@ async function buildAggregateOutline() {
     lines.push('');
     lines.push(outline);
     lines.push('');
-  }
+  });
+
   return lines.join('\n').trim();
 }
 
@@ -588,21 +629,38 @@ async function getDiagramOutline(diagram) {
   if (state.outlineCache.has(diagram.id)) {
     return state.outlineCache.get(diagram.id);
   }
-
-  try {
-    const response = await fetch(diagram.file);
-    if (!response.ok) {
-      throw new Error('Unable to load Mermaid file');
-    }
-    const source = await response.text();
-    const outline = deriveOutline(diagram, source);
-    state.outlineCache.set(diagram.id, outline ?? '');
-    return outline ?? '';
-  } catch (error) {
-    console.error(`Unable to derive outline for ${diagram.name}`, error);
+  if (state.outlinePromises.has(diagram.id)) {
+    return state.outlinePromises.get(diagram.id);
+  }
+  if (!diagram.file) {
+    console.warn(`Diagram "${diagram.name}" is missing a Mermaid source file`);
     state.outlineCache.set(diagram.id, '');
     return '';
   }
+
+  const outlinePromise = fetch(diagram.file)
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error('Unable to load Mermaid file');
+      }
+      return response.text();
+    })
+    .then((source) => {
+      const outline = deriveOutline(diagram, source);
+      state.outlineCache.set(diagram.id, outline ?? '');
+      return outline ?? '';
+    })
+    .catch((error) => {
+      console.error(`Unable to derive outline for ${diagram.name}`, error);
+      state.outlineCache.set(diagram.id, '');
+      return '';
+    })
+    .finally(() => {
+      state.outlinePromises.delete(diagram.id);
+    });
+
+  state.outlinePromises.set(diagram.id, outlinePromise);
+  return outlinePromise;
 }
 
 function deriveOutline(diagram, source) {
@@ -643,7 +701,7 @@ function handleToolbarAction(action) {
 function populateStructurePanel(diagram, source) {
   const outlineText = deriveOutline(diagram, source);
   if (!outlineText) {
-    elements.structureOutput.textContent = 'No outline data detected in this diagram.';
+    elements.structureOutput.textContent = TEXT.noOutline;
     state.structureText = '';
     setStructureCopyAvailability(false);
     return;
@@ -778,7 +836,7 @@ function setViewerDescription(description) {
   if (!elements.viewerDescription) return;
   elements.viewerDescription.textContent = description?.trim()
     ? description
-    : 'No description available for this page yet.';
+    : TEXT.defaultDescription;
 }
 
 function setViewPageLink(url) {
